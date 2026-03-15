@@ -4,18 +4,30 @@
 import os
 import json
 import subprocess
+import shlex
 import numpy as np
 
 
 def get_popen(command):
+    """
+    Execute a shell command safely. 
+    Expects command as a list of strings or a string to be split.
+    """
+    if isinstance(command, str):
+        import shlex
+        command = shlex.split(command)
+
     p = subprocess.Popen(
         command,
         universal_newlines=True,
-        shell=True,
+        shell=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    return p.stdout.read().strip()
+    stdout, stderr = p.communicate()
+    if p.returncode != 0:
+        print(f"Error executing command: {stderr.strip()}")
+    return stdout.strip()
 
 
 def write_dict_to_json(data, fn_json):

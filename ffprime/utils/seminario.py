@@ -1,3 +1,5 @@
+import numpy as np
+
 def get_force_constant_bond(atom_i, atom_j, bonds, coords, hessian):
     """Calculate the force constant for a bond.""" 
     bond = [atom_i, atom_j]
