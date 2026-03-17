@@ -559,7 +559,7 @@ def compute_d1_grimme_dispersion_interaction(
         ).flatten()
     )
     # distance unit in bohr
-    d_ener = c6_mean / ((r12 * angstrom) ** 6)
+    d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # make arrays of reference R0 for atoms in each fragment
     r0a = np.array([ref_r0[n] for n in atnum_a])
     r0b = np.array([ref_r0[n] for n in atnum_b])
@@ -669,7 +669,7 @@ def compute_d2_grimme_dispersion_interaction(
         ).flatten()
     ) ** 0.5  
     # distance unit in bohr
-    d_ener = c6_mean / ((r12 * angstrom) ** 6)  
+    d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # make arrays of reference R0 for atoms in each fragment
     r0a = np.array([ref_r0[n] for n in atnum_a])
     r0b = np.array([ref_r0[n] for n in atnum_b])
