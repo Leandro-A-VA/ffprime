@@ -30,8 +30,8 @@ conda activate env_qcdevs_py310
  pip install git+https://github.com/theochem/AtomDB.git
 
  # install FFprime
- git clone git@github.com:ccastilloo/FFprime.git
- cd FFprime
+ git clone https://github.com/theochem/ffprime.git
+ cd ffprime
  pip install -e .
 ```
 
