@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.spatial
 import scipy.constants as spc
+from scipy.optimize import brentq
 
 # The unit conversion factors below can be used as follows:
 angstrom: float = spc.angstrom / spc.value("atomic unit of length")
@@ -470,6 +471,131 @@ def compute_energy_dispersion_interaction_tang(
     d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # unit depend on C6 coefficients
     return sum(d_ener)  
+
+def compute_energy_dispersion_interaction_TKAT(
+    c6a,
+    c6b,
+    c1,
+    c2,
+    alpha_a,
+    alpha_b
+):
+    r"""
+    Compute intermolecular dispersion interaction energy using C6, c8 and c10 coefficients
+    """
+    # Reference: ¨Universal Pairise Interatomic van der Waals Potentials Based on Quantum Drude oscillator.¨
+    #            Khabibrakhmanov, A. and Fedorov, V. D. and Tkatchenko, A. J. Chem Theory Comput. 2023, 19, 7895-7909
+    #            https://doi.org/10.1021/acs.jctc.3c00797
+    # ============================================================================================
+    # 1. Input validation
+    # ============================================================================================
+    c6a = np.asarray(c6a, dtype=float)
+    c6b = np.asarray(c6b, dtype=float)
+    c1 = np.asarray(c1, dtype=float)
+    c2 = np.asarray(c2, dtype=float)
+    alpha_a = np.asarray(alpha_a, dtype=float)
+    alpha_b = np.asarray(alpha_b, dtype=float)
+    
+    if len(c6a) != len(c1):
+        raise ValueError(f"c6a and c1 length mismatch: {len(c6a)} vs {len(c1)}")
+    if len(c6b) != len(c2):
+        raise ValueError(f"c6b and c2 length mismatch: {len(c6b)} vs {len(c2)}")
+    if len(c6a) != len(alpha_a):
+        raise ValueError(f"c6a and alpha_a length mismatch: {len(c6a)} vs {len(alpha_a)}")
+    if len(c6b) != len(alpha_b):
+        raise ValueError(f"c6b and alpha_b length mismatch: {len(c6b)} vs {len(alpha_b)}")
+    
+    if np.any(c6a < 0) or np.any(c6b < 0):
+        raise ValueError("C6 coefficients must be positive")
+    if np.any(alpha_a < 0) or np.any(alpha_b < 0):
+        raise ValueError("Polarizabilities must be positive")
+    
+    # ============================================================================================
+    # 2. Compute distances in Bohr
+    # ============================================================================================
+    c1_bohr = c1 * angstrom
+    c2_bohr = c2 * angstrom
+    
+    r12 = scipy.spatial.distance.cdist(c1_bohr, c2_bohr, metric="euclidean").flatten()
+    valid_pairs = r12 > 1e-10
+    r12 = r12[valid_pairs]
+    
+    if len(r12) == 0:
+        return 0.0, np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
+    
+    # ============================================================================================
+    # 3. Effective polarizabilities (Eq. 21 from ref: α_AB = (α_A + α_B) / 2)
+    # ============================================================================================
+    alpha_a_expanded = np.repeat(alpha_a, len(alpha_b))[valid_pairs]
+    alpha_b_expanded = np.tile(alpha_b, len(alpha_a))[valid_pairs]
+    alpha_pair = (alpha_a_expanded + alpha_b_expanded) / 2
+    
+    # ============================================================================================
+    # 4. Effective C6 coefficients (Eq. 19 from ref)
+    # ============================================================================================
+    c6_a_expanded = np.repeat(c6a, len(c6b))[valid_pairs]
+    c6_b_expanded = np.tile(c6b, len(c6a))[valid_pairs]
+    
+    numerator = 2.0 * alpha_a_expanded * alpha_b_expanded * c6_a_expanded * c6_b_expanded
+    denominator = c6_a_expanded * (alpha_b_expanded ** 2) + c6_b_expanded * (alpha_a_expanded ** 2)
+    c6_pair = numerator / denominator
+    
+    # ============================================================================================
+    # 5. Quantum Drude oscillator parametrization (Eq. S33 supporting info)
+    # ============================================================================================
+    alpha_fsc = spc.alpha  # Fine structure constant
+    a_const = 9 * alpha_fsc**(4/3) / 64
+    
+    muomega = np.zeros_like(alpha_pair)
+    
+    for i, alpha in enumerate(alpha_pair):
+        b_const = 2 * alpha**(2/7) / alpha_fsc**(8/21)
+        
+        def f(x):
+            """Equation: a*exp(b*x) = 2*x² + x/b"""
+            exponent = b_const * x
+            if exponent > 700:
+                return a_const * np.exp(700) - 2 * x**2 - x / b_const
+            return a_const * np.exp(exponent) - 2 * x**2 - x / b_const
+        
+        # Search for roots
+        xs = np.linspace(1e-8, 100.0, 10000)
+        vals = np.array([f(x) for x in xs])
+        
+        roots = []
+        for j in range(len(xs) - 1):
+            v1 = vals[j]
+            v2 = vals[j + 1]
+            if not np.isfinite(v1) or not np.isfinite(v2):
+                continue
+            if (v1 > 0 and v2 < 0) or (v1 < 0 and v2 > 0):
+                try:
+                    root = brentq(f, xs[j], xs[j + 1])
+                    if root > 0:
+                        roots.append(root)
+                except (ValueError, RuntimeError):
+                    continue
+        # Take the larger root (physical solution)
+        muomega[i] = max(roots)
+    
+    # ============================================================================================
+    # 6. Compute C8 and C10 coefficients (Eq. 2 from ref)
+    # ============================================================================================
+    c8_pair = 5 * c6_pair / muomega
+    c10_pair = (245 / 8) * c6_pair / muomega**2
+    
+    # ============================================================================================
+    # 7. Compute dispersion energy
+    # ============================================================================================
+    r6 = r12 ** 6
+    r8 = r12 ** 8
+    r10 = r12 ** 10
+    
+    HARTREE_TO_KCAL = 627.509  # kcal/mol
+    d_ener_hartree = -c6_pair / r6 - c8_pair / r8 - c10_pair / r10
+    total_energy_kcal = np.sum(d_ener_hartree) * HARTREE_TO_KCAL
+    
+    return total_energy_kcal, c6_pair, c8_pair, c10_pair, muomega, r12
 
 def compute_d1_grimme_dispersion_interaction(
     c6a,
