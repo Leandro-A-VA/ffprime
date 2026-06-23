@@ -77,6 +77,39 @@ class TestMonopolePotential:
         result = monopole_potential(charges, coords, points)
         assert_allclose(result, [1.0, 0.5, 1/3], rtol=1e-10)
 
+    def test_charge_coordinate_length_mismatch(self):
+        """Number of charges and coordinates must match"""
+        charges = np.array([1.0, 2.0])
+        coords = np.array([[0.0, 0.0, 0.0]])
+        points = np.array([[1.0, 0.0, 0.0]])
+        with pytest.raises(ValueError):
+            monopole_potential(charges, coords, points)
+
+    def test_invalid_coordinate_shape(self):
+        """Coordinates must have shape (N, 3)"""
+        charges = np.array([1.0])
+        coords = np.array([0.0, 0.0, 0.0])
+        points = np.array([[1.0, 0.0, 0.0]])
+        with pytest.raises(ValueError):
+            monopole_potential(charges, coords, points)
+
+    def test_invalid_points_shape(self):
+        """Points must have shape (M, 3)"""
+        charges = np.array([1.0])
+        coords = np.array([[0.0, 0.0, 0.0]])
+        points = np.array([1.0, 0.0, 0.0])
+        with pytest.raises(ValueError):
+            monopole_potential(charges, coords, points)
+
+    def test_monopole_matches_analytic_formula(self):
+        """Verify implementation against analytical V=q/r formula"""
+        charges = np.array([2.0])
+        coords = np.array([[0.0, 0.0, 0.0]])
+        points = np.array([[4.0, 0.0, 0.0]])
+        result = monopole_potential(charges, coords, points)
+        expected = 2.0 / 4.0
+        assert_allclose(result, [expected], rtol=1e-10)
+
 
 class TestMonopoleField:
 
@@ -116,6 +149,15 @@ class TestMonopoleField:
         points = np.array([[0.0, 0.0, 0.0]])
         result = monopole_field(charges, coords, points)
         assert np.isfinite(result).all()
+
+    def test_monopole_field_matches_analytic_formula(self):
+        """Verify implementation against analytical E=q*r/r^3 formula"""
+        charges = np.array([2.0])
+        coords = np.array([[0.0, 0.0, 0.0]])
+        points = np.array([[2.0, 0.0, 0.0]])
+        result = monopole_field(charges, coords, points)
+        expected = np.array([[0.5, 0.0, 0.0]])
+        assert_allclose(result, expected, rtol=1e-10)
 
 
 # ─────────────────────────────────────────────
@@ -211,7 +253,7 @@ class TestQuadrupolePotential:
         """
         Q = diag(-1,-1,2) (traceless), point at (0,0,2):
         Qrr = Q_ab r_a r_b = 2*4 = 8
-        V = Qrr / (2*r^5) = 8 / (2*32) = 0.125
+        V = Qrr / r^5 = 8 / 32 = 0.25
         """
         Q = np.array([[[-1.0, 0.0, 0.0],
                        [0.0, -1.0, 0.0],
@@ -219,7 +261,7 @@ class TestQuadrupolePotential:
         coords = np.array([[0.0, 0.0, 0.0]])
         points = np.array([[0.0, 0.0, 2.0]])
         result = quadrupole_potential(Q, coords, points)
-        assert_allclose(result, [0.125], rtol=1e-10)
+        assert_allclose(result, [0.25], rtol=1e-10)
 
     def test_traceless_symmetry(self):
         """Trace of Q should not contribute — pure traceless result"""
