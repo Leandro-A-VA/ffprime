@@ -2,7 +2,7 @@ import numpy as np
 from atomdb import Element, load
 from denspart.cache import ComputeCache
 from denspart.mbis import MBISProModel
-from denspart.properties import compute_radial_moments
+from denspart.properties import compute_radial_moments, compute_multipole_moments
 from denspart.vh import optimize_reduce_pro_model
 from types import SimpleNamespace
 from iodata import load_one
@@ -52,10 +52,10 @@ class Partitioning:
         c6s_eff = np.zeros(len(mol.atnums))
         a_eff = np.zeros(len(mol.atnums))
         sigma = np.zeros(len(mol.atnums))
-        epsilon = np.zeros(len(mol.atnums))    
+        epsilon = np.zeros(len(mol.atnums))
 
         # Partitioning scheme selection
-        
+
         if scheme == "mbis":
             pro_model_init = MBISProModel.from_geometry(mol.atnums, mol.atcoords)
             pro_model, localgrids = optimize_reduce_pro_model(
@@ -69,6 +69,8 @@ class Partitioning:
             )
             print("Compute Teochem_MBIS partitioning model:")
             radial_moments = compute_radial_moments(pro_model, grid, moldens, localgrids)
+            cartesian_moments = compute_cartesian_atomic_moments(pro_model, grid, moldens, localgrids)
+            atdipoles, atquads = cartesian_moments[:, 1:4], cartesian_moments[:, 4:]
             print(mol.atnums)
             atcharges = pro_model.charges
             for i, atnum in enumerate(mol.atnums):
@@ -81,9 +83,9 @@ class Partitioning:
                 a_eff[i] = (volume_ratios[i]) * Element(atnum).pold['chu']
                 sigma[i]=((5.08 * a_eff[i] ** (1.0 / 7.0))/(2 ** (1.0 / 6.0)))/nanometer
                 epsilon[i]=(c6s_eff[i]/(2*(5.08 * a_eff[i] ** (1.0 / 7.0))**6))/kjmol
-                
-   
-        
+
+
+
         #save the attributes in part object
 
         result = SimpleNamespace()
@@ -96,15 +98,36 @@ class Partitioning:
         result.alpha = a_eff
         result.sigma = sigma
         result.epsilon = epsilon
-      
+
         # guarda el objeto "part" real por si lo necesitas
         result.part = part
 
         self.part = result
         return result
-    
+
         #else:
         #    raise ValueError(f"Given scheme={scheme} not supported!")
-    
 
 
+def compute_cartesian_atomic_moments(pro_model, grid, moldens, localgrids):
+    cartesian_moments = []
+    pure_moments = compute_multipole_moments(pro_model, grid, moldens, localgrids)
+    for i, pm in enumerate(pure_moments):
+                        # atomic charges
+                        atmom_cart = [pro_model.charges[i]]
+
+                        # atomic dipole moment
+                        atmom_cart.append(-pm[1])  # x
+                        atmom_cart.append(-pm[2])  # y
+                        atmom_cart.append(-pm[0])  # z
+
+                        # atomic quadrupole moment (this is traceless, unlike what is stored for other schemes)
+                        atmom_cart.append(-(-0.5 * pm[3] + (np.sqrt(3) / 2) * pm[6]))  # xx
+                        atmom_cart.append(-((np.sqrt(3) / 2) * pm[7]))  # xy
+                        atmom_cart.append(-((np.sqrt(3) / 2) * pm[4]))  # xz
+                        atmom_cart.append(-(-0.5 * pm[3] - (np.sqrt(3) / 2) * pm[6]))  # yy
+                        atmom_cart.append(-((np.sqrt(3) / 2) * pm[5]))  # yz
+                        atmom_cart.append(-pm[3])
+
+                        cartesian_moments.append(atmom_cart)
+    return np.array(cartesian_moments)
