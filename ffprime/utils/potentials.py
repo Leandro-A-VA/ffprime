@@ -228,15 +228,19 @@ def compute_energy_dispersion_interaction_LB(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular dispersion interaction energy using Lennard Jonnes coefficients and the Lorentz-Berthelot combination rule.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}{r^{6}_{ij}}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    sa : ndarray shape (M, )
+        Sigma parameters of monomer 1
+    sb : ndarray shape (N, )
+        Sigma parameters of monomer 2
+    ea : ndarray shape (M, )
+        Epsilon parameters of monomer 1
+    eb : ndarray shape (N, )
+        Epsilon parameters of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -249,19 +253,19 @@ def compute_energy_dispersion_interaction_LB(
     # check c6 coefficient and coordinates lenghts
     if len(sa) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(sa)} and {len(c1)}"
+            f"Expected sa and c1 to have the same length; got {len(sa)} and {len(c1)}"
         )
     if len(ea) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(ea)} and {len(c1)}"
+            f"Expected ea and c1 to have the same length; got {len(ea)} and {len(c1)}"
         )
     if len(sb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(sb)} and {len(c2)}"
+            f"Expected sb and c2 to have the same length; got {len(sb)} and {len(c2)}"
         )
     if len(eb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(eb)} and {len(c2)}"
+            f"Expected eb and c2 to have the same length; got {len(eb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
@@ -284,15 +288,15 @@ def compute_energy_repulsion_interaction(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular repulsion interaction energy using C12 coefficients.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{rep} = \sum_{j>i}^{}\frac{\sqrt{C_{12,i}C_{12,j}}}{r^{12}_{ij}}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    C12a : ndarray shape (M, )
+        Atomic c12 coefficient of monomer 1
+    c12b : ndarray shape (N, )
+        Atomic c12 coefficient of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -305,17 +309,17 @@ def compute_energy_repulsion_interaction(
     # check c6 coefficient and coordinates lenghts
     if len(c12a) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c12a)} and {len(c1)}"
+            f"Expected c12a and c1 to have the same length; got {len(c12a)} and {len(c1)}"
         )
     if len(c12b) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c12b)} and {len(c2)}"
+            f"Expected c12b and c2 to have the same length; got {len(c12b)} and {len(c2)}"
         )
     # check c6 coefficient are positive
     if any(np.array(c12a) < 0):
-        raise ValueError(f"Expected c6a coefficiente to be positive; got {c12a}")
+        raise ValueError(f"Expected c12a coefficients to be positive; got {c12a}")
     if any(np.array(c12b) < 0):
-        raise ValueError(f"Expected c6b coefficiente to be positive; got {c12b}")
+        raise ValueError(f"Expected c12b coefficients to be positive; got {c12b}")
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
     # list of the c6 geometric mean
@@ -338,15 +342,19 @@ def compute_energy_repulsion_interaction_LB(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular repulsion interaction energy using Lennard Jonnes coefficients and the Lorentz-Berthelot combination rule.
     ..math:
       E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    sa : ndarray shape (M, )
+        Sigma parameters of monomer 1
+    sb : ndarray shape (N, )
+        Sigma parameters of monomer 2
+    ea : ndarray shape (M, )
+        Epsilon parameters of monomer 1
+    eb : ndarray shape (N, )
+        Epsilon parameters of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
