@@ -97,11 +97,11 @@ def compute_electrostatic_energy_with_cp(
         # check charge and coordinates lenghts
     if len(qa) != len(c1):
         raise ValueError(
-            f"Expected q1 and c1 to have the same length; got {len(q1)} and {len(c1)}"
+            f"Expected q1 and c1 to have the same length; got {len(qa)} and {len(c1)}"
         )
     if len(qb) != len(c2):
         raise ValueError(
-            f"Expected q2 and c2 to have the same length; got {len(q2)} and {len(c2)}"
+            f"Expected q2 and c2 to have the same length; got {len(qb)} and {len(c2)}"
         )
     # compute electron charges in fragment 1 and 2
     rho_a = -1*np.subtract(np.array(atnum_a), np.array(qa))
@@ -124,7 +124,7 @@ def compute_electrostatic_energy_with_cp(
     # check charge penetration parameters
     for num in atnum_b:
         if num not in alpha.keys():
-            raise ValueError(f"alpha parameter {num} not found, available options: {ref_a.keys()}")
+            raise ValueError(f"alpha parameter {num} not found, available options: {alpha.keys()}")
     
     damp_ba = (1 - np.exp(-1*alpha_b[:, np.newaxis]*dist_ba)).flatten()# damping function to electron B
     c_ebna = (q_na_eb/(dist_ba*angstrom).flatten())*damp_ba
@@ -137,7 +137,7 @@ def compute_electrostatic_energy_with_cp(
     # check charge penetration parameters
     for num in atnum_a:
         if num not in alpha.keys():
-            raise ValueError(f"alpha parameter {num} not found, available options: {ref_a.keys()}")
+            raise ValueError(f"alpha parameter {num} not found, available options: {alpha.keys()}")
     
     damp_ab = (1 - np.exp(-1*alpha_a[:, np.newaxis]*dist_ab)).flatten()# damping function to electron A
     c_eanb = (q_nb_ea/(dist_ab*angstrom).flatten())*damp_ab
@@ -249,19 +249,19 @@ def compute_energy_dispersion_interaction_LB(
     # check c6 coefficient and coordinates lenghts
     if len(sa) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c6a and c1 to have the same length; got {len(sa)} and {len(c1)}"
         )
     if len(ea) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c6a and c1 to have the same length; got {len(ea)} and {len(c1)}"
         )
     if len(sb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c6b and c2 to have the same length; got {len(sb)} and {len(c2)}"
         )
     if len(eb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c6b and c2 to have the same length; got {len(eb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
@@ -305,17 +305,17 @@ def compute_energy_repulsion_interaction(
     # check c6 coefficient and coordinates lenghts
     if len(c12a) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c6a and c1 to have the same length; got {len(c12a)} and {len(c1)}"
         )
     if len(c12b) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c6b and c2 to have the same length; got {len(c12b)} and {len(c2)}"
         )
     # check c6 coefficient are positive
     if any(np.array(c12a) < 0):
-        raise ValueError(f"Expected c6a coefficiente to be positive; got {c6a}")
+        raise ValueError(f"Expected c6a coefficiente to be positive; got {c12a}")
     if any(np.array(c12b) < 0):
-        raise ValueError(f"Expected c6b coefficiente to be positive; got {c6b}")
+        raise ValueError(f"Expected c6b coefficiente to be positive; got {c12b}")
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
     # list of the c6 geometric mean
@@ -359,19 +359,19 @@ def compute_energy_repulsion_interaction_LB(
     # check c6 coefficient and coordinates lenghts
     if len(sa) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c6a and c1 to have the same length; got {len(sa)} and {len(c1)}"
         )
     if len(ea) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c6a and c1 to have the same length; got {len(ea)} and {len(c1)}"
         )
     if len(sb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c6b and c2 to have the same length; got {len(sb)} and {len(c2)}"
         )
     if len(eb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c6b and c2 to have the same length; got {len(eb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
