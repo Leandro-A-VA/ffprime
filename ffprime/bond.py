@@ -28,6 +28,8 @@ class Bonded:
                 print("Eigenvectors are orthonormal.")
             else:
                 raise ValueError("Eigenvectors are not orthonormal.")
+        else:
+            self.hess_new = self.hess.copy()
 
         self.hess_new = (self.hess_new * 627.509391) / (0.529 ** 2)
         self.hess = (self.hess * 627.509391) / (0.529 ** 2)

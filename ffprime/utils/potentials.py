@@ -8,7 +8,7 @@ angstrom: float = spc.angstrom / spc.value("atomic unit of length")
 electronvolt: float = 1 / spc.value("hartree-electron volt relationship")
 
 
-def compute_energy_coulomb_interaction(q1, q2, c1, c2, unit="au"):
+def compute_energy_coulomb_interaction(qa, qb, c1, c2, unit="au"):
     r"""
     Compute intermolecular electrostatic interaction energy using point-charge approximation.
     ..math:
@@ -31,19 +31,19 @@ def compute_energy_coulomb_interaction(q1, q2, c1, c2, unit="au"):
         Electrostatic interaction energy in chosen unit.
     """
     # check charge and coordinates lenghts
-    if len(q1) != len(c1):
+    if len(qa) != len(c1):
         raise ValueError(
-            f"Expected q1 and c1 to have the same length; got {len(q1)} and {len(c1)}"
+            f"Expected q1 and c1 to have the same length; got {len(qa)} and {len(c1)}"
         )
-    if len(q2) != len(c2):
+    if len(qb) != len(c2):
         raise ValueError(
-            f"Expected q2 and c2 to have the same length; got {len(q2)} and {len(c2)}"
+            f"Expected q2 and c2 to have the same length; got {len(qb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  
     # list of the charges product
     q_mult = np.multiply(
-        np.array(q1).reshape(-1, 1), np.array(q2).reshape(1, -1)
+        np.array(qa).reshape(-1, 1), np.array(qb).reshape(1, -1)
     ).flatten()
     # distance unit in bohr
     c_ener = q_mult / (r12 * angstrom)  
@@ -65,13 +65,17 @@ def compute_electrostatic_energy_with_cp(
     r"""
     Compute intermolecular electrostatic energy with charge penetration correction.
     ..math:
-      E_{e} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+       E_{elec}^{CP}=\sum_{A, B>A}\frac{Z_{A}Z_{B}}{r_{AB}}+\sum_{A, B > A}\frac{Z_{A}\mathrm{q}_{B}}{r_{AB}}f_{damp}\left( r_{AB} \right)+\sum_{A, B > A}\frac{\mathrm{q}_{A}Z_{B}}{\mathbf{r}_{AB}}f_{damp}\left(r_{AB} \right)+\sum_{A, B>A}\frac{\mathrm{q}_{A}\mathrm{q}_{B}}{r_{AB}}f_{damp}^{overlap}\left(r_{AB} \right)
     Parameters
     ----------
     qa : ndarray shape (M, )
-        Atomic charge of monomer 1
+        Atomic c6 coefficient of monomer 1
     qb : ndarray shape (N, )
-        Atomic charge of monomer 2
+        Atomic c6 coefficient of monomer 2
+    atnum_a : ndarray shape (M, )
+        Atomic number for each atom in monomer 1
+    atnum_b : ndarray shape (N, )
+        Atomic number for each atom in monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -98,11 +102,11 @@ def compute_electrostatic_energy_with_cp(
         # check charge and coordinates lenghts
     if len(qa) != len(c1):
         raise ValueError(
-            f"Expected q1 and c1 to have the same length; got {len(q1)} and {len(c1)}"
+            f"Expected q1 and c1 to have the same length; got {len(qa)} and {len(c1)}"
         )
     if len(qb) != len(c2):
         raise ValueError(
-            f"Expected q2 and c2 to have the same length; got {len(q2)} and {len(c2)}"
+            f"Expected q2 and c2 to have the same length; got {len(qb)} and {len(c2)}"
         )
     # compute electron charges in fragment 1 and 2
     rho_a = -1*np.subtract(np.array(atnum_a), np.array(qa))
@@ -125,7 +129,7 @@ def compute_electrostatic_energy_with_cp(
     # check charge penetration parameters
     for num in atnum_b:
         if num not in alpha.keys():
-            raise ValueError(f"alpha parameter {num} not found, available options: {ref_a.keys()}")
+            raise ValueError(f"alpha parameter {num} not found, available options: {alpha.keys()}")
     
     damp_ba = (1 - np.exp(-1*alpha_b[:, np.newaxis]*dist_ba)).flatten()# damping function to electron B
     c_ebna = (q_na_eb/(dist_ba*angstrom).flatten())*damp_ba
@@ -138,7 +142,7 @@ def compute_electrostatic_energy_with_cp(
     # check charge penetration parameters
     for num in atnum_a:
         if num not in alpha.keys():
-            raise ValueError(f"alpha parameter {num} not found, available options: {ref_a.keys()}")
+            raise ValueError(f"alpha parameter {num} not found, available options: {alpha.keys()}")
     
     damp_ab = (1 - np.exp(-1*alpha_a[:, np.newaxis]*dist_ab)).flatten()# damping function to electron A
     c_eanb = (q_nb_ea/(dist_ab*angstrom).flatten())*damp_ab
@@ -191,7 +195,7 @@ def compute_energy_dispersion_interaction(
     Returns
     -------
     d_energy : np.float64
-        Dispersion interaction energy (units depends on units of C6 coefficients).
+        Dispersion interaction energy.
     """
     # check c6 coefficient and coordinates lenghts
     if len(c6a) != len(c1):
@@ -204,9 +208,9 @@ def compute_energy_dispersion_interaction(
         )
     # check c6 coefficient are positive
     if any(np.array(c6a) < 0):
-        raise ValueError(f"Expected c6a coefficiente to be positive; got {c6a}")
+        raise ValueError(f"Expected c6a coefficients to be positive; got {c6a}")
     if any(np.array(c6b) < 0):
-        raise ValueError(f"Expected c6b coefficiente to be positive; got {c6b}")
+        raise ValueError(f"Expected c6b coefficients to be positive; got {c6b}")
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
     # list of the c6 geometric mean
@@ -229,15 +233,19 @@ def compute_energy_dispersion_interaction_LB(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular dispersion interaction energy using Lennard Jonnes coefficients and the Lorentz-Berthelot combination rule.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{disp} = -\sum_{j>i} \frac{4\epsilon_{ij} \sigma_{ij}^{6}}{r^{6}_{ij}}; && \epsilon_{ij}=\sqrt{\epsilon_{i}\epsilon_{j}},\sigma_{ij}=\frac{\sigma_{i}+\sigma_{j}}{2}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    sa : ndarray shape (M, )
+        Sigma parameters of monomer 1
+    sb : ndarray shape (N, )
+        Sigma parameters of monomer 2
+    ea : ndarray shape (M, )
+        Epsilon parameters of monomer 1
+    eb : ndarray shape (N, )
+        Epsilon parameters of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -245,24 +253,24 @@ def compute_energy_dispersion_interaction_LB(
     Returns
     -------
     d_energy : np.float64
-        Dispersion interaction energy (units depends on units of C6 coefficients).
+        Dispersion interaction energy.
     """
     # check c6 coefficient and coordinates lenghts
     if len(sa) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected sa and c1 to have the same length; got {len(sa)} and {len(c1)}"
         )
     if len(ea) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected ea and c1 to have the same length; got {len(ea)} and {len(c1)}"
         )
     if len(sb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected sb and c2 to have the same length; got {len(sb)} and {len(c2)}"
         )
     if len(eb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected eb and c2 to have the same length; got {len(eb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
@@ -285,15 +293,15 @@ def compute_energy_repulsion_interaction(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular repulsion interaction energy using atomic C12 coefficients.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{rep} = \sum_{j>i}^{}\frac{\sqrt{C_{12,i}C_{12,j}}}{r^{12}_{ij}}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    C12a : ndarray shape (M, )
+        Atomic c12 coefficient of monomer 1
+    c12b : ndarray shape (N, )
+        Atomic c12 coefficient of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -306,17 +314,17 @@ def compute_energy_repulsion_interaction(
     # check c6 coefficient and coordinates lenghts
     if len(c12a) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected c12a and c1 to have the same length; got {len(c12a)} and {len(c1)}"
         )
     if len(c12b) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected c12b and c2 to have the same length; got {len(c12b)} and {len(c2)}"
         )
     # check c6 coefficient are positive
     if any(np.array(c12a) < 0):
-        raise ValueError(f"Expected c6a coefficiente to be positive; got {c6a}")
+        raise ValueError(f"Expected c12a coefficients to be positive; got {c12a}")
     if any(np.array(c12b) < 0):
-        raise ValueError(f"Expected c6b coefficiente to be positive; got {c6b}")
+        raise ValueError(f"Expected c12b coefficients to be positive; got {c12b}")
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
     # list of the c6 geometric mean
@@ -339,15 +347,19 @@ def compute_energy_repulsion_interaction_LB(
     c2,
 ):
     r"""
-    Compute intermolecular dispersion interaction energy using C6 coefficients.
+    Compute intermolecular repulsion interaction energy using Lennard Jonnes coefficients and the Lorentz-Berthelot combination rule.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{rep} = \sum_{j>i} \frac{4\epsilon_{ij} \sigma_{ij}^{12}}{r^{12}_{ij}}; && \epsilon_{ij}=\sqrt{\epsilon_{i}\epsilon_{j}},\sigma_{ij}=\frac{\sigma_{i}+\sigma_{j}}{2}
     Parameters
     ----------
-    C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
-    c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+    sa : ndarray shape (M, )
+        Sigma parameters of monomer 1
+    sb : ndarray shape (N, )
+        Sigma parameters of monomer 2
+    ea : ndarray shape (M, )
+        Epsilon parameters of monomer 1
+    eb : ndarray shape (N, )
+        Epsilon parameters of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -355,24 +367,24 @@ def compute_energy_repulsion_interaction_LB(
     Returns
     -------
     d_energy : np.float64
-        Dispersion interaction energy (units depends on units of C6 coefficients).
+        Repulsion interaction energy.
     """
     # check c6 coefficient and coordinates lenghts
     if len(sa) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected sa and c1 to have the same length; got {len(sa)} and {len(c1)}"
         )
     if len(ea) != len(c1):
         raise ValueError(
-            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+            f"Expected ea and c1 to have the same length; got {len(ea)} and {len(c1)}"
         )
     if len(sb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected sb and c2 to have the same length; got {len(sb)} and {len(c2)}"
         )
     if len(eb) != len(c2):
         raise ValueError(
-            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+            f"Expected eb and c2 to have the same length; got {len(eb)} and {len(c2)}"
         )
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
@@ -387,24 +399,29 @@ def compute_energy_repulsion_interaction_LB(
     r_ener = c12ab/((r12*angstrom)**12)
     # unit depend on C6 coefficients
     return sum(r_ener)  
-def compute_energy_dispersion_interaction_tang(
+
+def compute_energy_dispersion_interaction_denspart_tang(
     c6a,
     c6b,
-    atnum_a,
-    atnum_b,
+    pol_a,
+    pol_b,
     c1,
     c2,
 ):
     r"""
     Compute intermolecular dispersion interaction energy using C6 coefficients.
     ..math:
-      E_{disp} = -\sum_{j>i}^{}\frac{\sqrt{C_{6,i}C_{6,j}}}{r^{6}_{ij}}
+      E_{disp} = -\sum_{j>i}^{}\frac{C_{6,ij}^{Tang}}{r^{6}_{ij}}; && C_{6,ij}^{Tang}=\frac{2C_{6,i}C_{6,j}}{\frac{\alpha_{j}}{\alpha_{i}}C_{6,i}+\frac{\alpha_{i}}{\alpha_{j}}C_{6,j}}
     Parameters
     ----------
     C6a : ndarray shape (M, )
-        Atomic c6 coefficient of monomer 1
+        Atomic c6 coefficients of monomer 1
     c6b : ndarray shape (N, )
-        Atomic c6 coefficient of monomer 2
+        Atomic c6 coefficients of monomer 2
+    pol_a : ndarray shape (M, )
+        Atomic polarizabilities of monomer 1
+    pol_b : ndarray shape (N, )
+        Atomic polarizabilities of monomer 2
     c1 : ndarray shape (M, 3)
         Atomic Cartesian coordinates monomer 1
     c2 : ndarray shape (N, 3)
@@ -414,63 +431,48 @@ def compute_energy_dispersion_interaction_tang(
     d_energy : np.float64
         Dispersion interaction energy (units depends on units of C6 coefficients).
     """
-    ref_a = { # reference static polarizabilities of free atoms 
-     1: 4.5, 2: 1.38, 3: 164, 4: 38, 5: 21, 6: 12, 7: 7.4,
-            8: 5.4, 9: 3.8, 10: 2.67, 11: 163, 12: 71, 13: 60, 14:
-            37, 15: 25, 16: 19.6, 17: 15, 18: 11.1, 19: 294, 20:
-            160, 21: 120, 22: 98, 23: 84, 24: 78, 25: 63, 26:
-            56, 27: 50, 28: 48, 29: 42, 30: 40, 31: 60, 32:
-            41, 33: 29, 34: 25, 35: 20, 36: 16.7, 37: 320, 38:
-            199, 49: 75, 50: 60, 51: 44, 52: 40, 53: 35, 
-        }
-    # check c6 coefficient are positive
-    if any(np.array(c6a) < 0):
-        raise ValueError(f"Expected c6a coefficiente to be positive; got {c6a}")
-    if any(np.array(c6b) < 0):
-        raise ValueError(f"Expected c6b coefficiente to be positive; got {c6b}")
+
+    # check c6s, atomic polarizabilities and coordinates have the same lenghts
+    if len(c6a) != len(c1):
+        raise ValueError(
+            f"Expected c6a and c1 to have the same length; got {len(c6a)} and {len(c1)}"
+        )
+    if len(c6b) != len(c2):
+        raise ValueError(
+            f"Expected c6b and c2 to have the same length; got {len(c6b)} and {len(c2)}"
+        )
+    if len(pol_a) != len(c1):
+        raise ValueError(
+            f"Expected pol_a and c1 to have the same length; got {len(pol_a)} and {len(c1)}"
+        )
+    if len(pol_b) != len(c2):
+        raise ValueError(
+            f"Expected pol_b and c2 to have the same length; got {len(pol_b)} and {len(c2)}"
+        )
+    # check c6s and polarizabilities coefficients are positive
+    if np.any(np.array(c6a) < 0):
+        raise ValueError(f"Expected c6a coefficient to be positive; got {c6a}")
+    if np.any(np.array(c6b) < 0):
+        raise ValueError(f"Expected c6b coefficient to be positive; got {c6b}")
+    if np.any(np.array(pol_a) < 0):
+        raise ValueError(f"Expected pol_a coefficient to be positive; got {pol_a}")
+    if np.any(np.array(pol_b) < 0):
+        raise ValueError(f"Expected pol_b coefficient to be positive; got {pol_b}")
     
-    # check c6 coefficient and atomic number lenghts 
-    if len(c6a) != len(atnum_a):
-        raise ValueError(
-            f"Expected c6a and atnum_a to have the same length; got {len(c6a)} and {len(atnum_a)}"
-        )
-    if len(c6b) != len(atnum_b):
-        raise ValueError(
-            f"Expected c6b and atnum_b to have the same length; got {len(c6b)} and {len(atnum_b)}"
-        )
     c6ab = (
         np.multiply(
             np.array(c6a).reshape(-1, 1), np.array(c6b).reshape(1, -1)
             ).flatten()
         ) * 2  
-    # check static polarizabilities
-    for num in atnum_a:
-        if num not in ref_a.keys():
-            raise ValueError(f"static polarizability {num} not found, available options: {ref_a.keys()}")
-    for num in atnum_b:
-        if num not in ref_a.keys():
-            raise ValueError(f"static polarizability {num} not found, available options: {ref_a.keys()}")
-    alpha_a = [ref_a[n] for n in atnum_a]
-    alpha_b = [ref_a[n] for n in atnum_b]
-    # check c6 coefficient and static polarizability lenghts 
-    if len(c6a) != len(alpha_a):
-        raise ValueError(
-            f"Expected c6a and alpha_a to have the same length; got {len(c6a)} and {len(alpha_a)}"
-        )
-    if len(c6b) != len(alpha_b):
-        raise ValueError(
-            f"Expected c6b and alpha_b to have the same length; got {len(c6b)} and {len(alpha_b)}"
-        )
-    da = (np.divide(np.array(alpha_b).reshape(1, -1), np.array(alpha_a).reshape(-1, 1)) * np.array(c6a).reshape(-1, 1)).flatten()
-    db = (np.divide(np.array(alpha_a).reshape(-1, 1), np.array(alpha_b).reshape(1, -1)) * np.array(c6b).reshape(1, -1)).flatten()
+    da = (np.divide(np.array(pol_b).reshape(1, -1), np.array(pol_a).reshape(-1, 1)) * np.array(c6a).reshape(-1, 1)).flatten()
+    db = (np.divide(np.array(pol_a).reshape(-1, 1), np.array(pol_b).reshape(1, -1)) * np.array(c6b).reshape(1, -1)).flatten()
     c6_mean = c6ab / np.add(da,db)
-    #print(c6_mean)
     # compute Euclidean distance between pairs of atoms in fragment 1 and 2
     r12 = scipy.spatial.distance.cdist(c1, c2, "euclidean").flatten()  # Euclidean distance
     # distance unit in bohr
     d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # unit depend on C6 coefficients
-    return sum(d_ener)  
+    return np.sum(d_ener)  
 
 def compute_energy_dispersion_interaction_TKAT(
     c6a,
@@ -692,7 +694,7 @@ def compute_d1_grimme_dispersion_interaction(
         ).flatten()
     )
     # distance unit in bohr
-    d_ener = c6_mean / ((r12 * angstrom) ** 6)
+    d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # make arrays of reference R0 for atoms in each fragment
     r0a = np.array([ref_r0[n] for n in atnum_a])
     r0b = np.array([ref_r0[n] for n in atnum_b])
@@ -802,7 +804,7 @@ def compute_d2_grimme_dispersion_interaction(
         ).flatten()
     ) ** 0.5  
     # distance unit in bohr
-    d_ener = c6_mean / ((r12 * angstrom) ** 6)  
+    d_ener = -c6_mean / ((r12 * angstrom) ** 6)
     # make arrays of reference R0 for atoms in each fragment
     r0a = np.array([ref_r0[n] for n in atnum_a])
     r0b = np.array([ref_r0[n] for n in atnum_b])
