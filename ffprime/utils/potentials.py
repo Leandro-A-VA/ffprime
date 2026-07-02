@@ -478,7 +478,8 @@ def compute_energy_dispersion_interaction_TKAT(
     c1,
     c2,
     alpha_a,
-    alpha_b
+    alpha_b,
+    return_mu_omega=False
 ):
     r"""
     Compute intermolecular dispersion interaction energy using C6, c8 and c10 coefficients
@@ -517,42 +518,40 @@ def compute_energy_dispersion_interaction_TKAT(
     c2_bohr = c2 * angstrom
     
     r12 = scipy.spatial.distance.cdist(c1_bohr, c2_bohr, metric="euclidean").flatten()
-    valid_pairs = r12 > 1e-10
-    r12 = r12[valid_pairs]
-    
     if len(r12) == 0:
         return 0.0, np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
     
     # ============================================================================================
     # 3. Effective polarizabilities (Eq. 21 from ref: α_AB = (α_A + α_B) / 2)
     # ============================================================================================
-    alpha_a_expanded = np.repeat(alpha_a, len(alpha_b))[valid_pairs]
-    alpha_b_expanded = np.tile(alpha_b, len(alpha_a))[valid_pairs]
-    alpha_pair = (alpha_a_expanded + alpha_b_expanded) / 2
+    alpha_matrix = (alpha_a[:, np.newaxis] + alpha_b[np.newaxis, :]) / 2
+    alpha_pair = alpha_matrix.flatten()
     
     # ============================================================================================
     # 4. Effective C6 coefficients (Eq. 19 from ref)
     # ============================================================================================
-    c6_a_expanded = np.repeat(c6a, len(c6b))[valid_pairs]
-    c6_b_expanded = np.tile(c6b, len(c6a))[valid_pairs]
+    c6_a_matrix = c6a[:, np.newaxis]
+    c6_b_matrix = c6b[np.newaxis, :]
+    alpha_a_matrix = alpha_a[:, np.newaxis]
+    alpha_b_matrix = alpha_b[np.newaxis, :]
     
-    numerator = 2.0 * alpha_a_expanded * alpha_b_expanded * c6_a_expanded * c6_b_expanded
-    denominator = c6_a_expanded * (alpha_b_expanded ** 2) + c6_b_expanded * (alpha_a_expanded ** 2)
-    c6_pair = numerator / denominator
+    numerator = 2.0 * alpha_a_matrix * alpha_b_matrix * c6_a_matrix * c6_b_matrix
+    denominator = c6_a_matrix * (alpha_b_matrix ** 2) + c6_b_matrix * (alpha_a_matrix ** 2)
+    c6_matrix = numerator / denominator
+    c6_pair = c6_matrix.flatten()
     
     # ============================================================================================
     # 5. Quantum Drude oscillator parametrization (Eq. S33 supporting info)
     # ============================================================================================
-    alpha_fsc = spc.alpha  # Fine structure constant
-    a_const = 9 * alpha_fsc**(4/3) / 64
+    a_const = 9 * spc.alpha**(4/3) / 64
     
     muomega = np.zeros_like(alpha_pair)
     
     for i, alpha in enumerate(alpha_pair):
-        b_const = 2 * alpha**(2/7) / alpha_fsc**(8/21)
+        b_const = 2 * alpha**(2/7) / spc.alpha**(8/21)
         
         def f(x):
-            """Equation: a*exp(b*x) = 2*x² + x/b"""
+            """Equation: a*exp(b*x) - (2*x² + x/b) = 0"""
             exponent = b_const * x
             if exponent > 700:
                 return a_const * np.exp(700) - 2 * x**2 - x / b_const
@@ -575,8 +574,10 @@ def compute_energy_dispersion_interaction_TKAT(
                         roots.append(root)
                 except (ValueError, RuntimeError):
                     continue
+        
         # Take the larger root (physical solution)
-        muomega[i] = max(roots)
+        if roots:
+            muomega[i] = max(roots)
     
     # ============================================================================================
     # 6. Compute C8 and C10 coefficients (Eq. 2 from ref)
@@ -594,6 +595,12 @@ def compute_energy_dispersion_interaction_TKAT(
     HARTREE_TO_KCAL = 627.509  # kcal/mol
     d_ener_hartree = -c6_pair / r6 - c8_pair / r8 - c10_pair / r10
     total_energy_kcal = np.sum(d_ener_hartree) * HARTREE_TO_KCAL
+
+    if return_mu_omega:
+        # C₆ = (3/4) * ω * α²  (en unidades atómicas)
+        omega = (4 * c6_pair) / (3 * alpha_pair**2)
+        mu = muomega / omega
+        return total_energy_kcal, c6_pair, c8_pair, c10_pair, muomega, r12, mu, omega
     
     return total_energy_kcal, c6_pair, c8_pair, c10_pair, muomega, r12
 
