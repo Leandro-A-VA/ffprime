@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.spatial
 import scipy.constants as spc
-from scipy.optimize import brentq
+from scipy.optimize import newton
 
 # The unit conversion factors below can be used as follows:
 angstrom: float = spc.angstrom / spc.value("atomic unit of length")
@@ -545,41 +545,41 @@ def compute_energy_dispersion_interaction_TKAT(
     # ============================================================================================
     # 5. Quantum Drude oscillator parametrization (Eq. S33 supporting info)
     # ============================================================================================
-    a_const = 9 * spc.alpha**(4/3) / 64
-    
+
+    alpha_fsc = spc.alpha
+    a_const = 9 * alpha_fsc**(4/3) / 64
+
     muomega = np.zeros_like(alpha_pair)
-    
     for i, alpha in enumerate(alpha_pair):
-        b_const = 2 * alpha**(2/7) / spc.alpha**(8/21)
-        
+        b_const = 2 * alpha**(2/7) / alpha_fsc**(8/21)
         def f(x):
             """Equation: a*exp(b*x) - (2*x² + x/b) = 0"""
             exponent = b_const * x
             if exponent > 700:
-                return a_const * np.exp(700) - 2 * x**2 - x / b_const
-            return a_const * np.exp(exponent) - 2 * x**2 - x / b_const
+                return a_const * np.exp(700) - 2*x**2 - x/b_const
+            return a_const*np.exp(exponent) - 2*x**2 - x/b_const
+
+
+        def df(x):
+            """Derivative"""
+            exponent = b_const*x
+            if exponent > 700:
+                return a_const*b_const*np.exp(700) - 4*x - 1/b_const
+            return a_const*b_const*np.exp(exponent) - 4*x - 1/b_const
+        x0 = 0.5 + 0.3/(1 + alpha/10) # Initial guess
         
-        # Search for roots
-        xs = np.linspace(1e-8, 100.0, 10000)
-        vals = np.array([f(x) for x in xs])
-        
-        roots = []
-        for j in range(len(xs) - 1):
-            v1 = vals[j]
-            v2 = vals[j + 1]
-            if not np.isfinite(v1) or not np.isfinite(v2):
-                continue
-            if (v1 > 0 and v2 < 0) or (v1 < 0 and v2 > 0):
-                try:
-                    root = brentq(f, xs[j], xs[j + 1])
-                    if root > 0:
-                        roots.append(root)
-                except (ValueError, RuntimeError):
-                    continue
-        
-        # Take the larger root (physical solution)
-        if roots:
-            muomega[i] = max(roots)
+        x = newton(
+        f,
+        x0,
+        fprime=df,
+        tol=1e-12,
+        maxiter=100
+    )
+
+    if np.isfinite(x) and x > 1e-8:
+        muomega[i] = x
+    else:
+        raise RuntimeError(f"Non physical root for alpha={alpha}")
     
     # ============================================================================================
     # 6. Compute C8 and C10 coefficients (Eq. 2 from ref)
@@ -588,18 +588,34 @@ def compute_energy_dispersion_interaction_TKAT(
     c10_pair = (245 / 8) * c6_pair / muomega**2
     
     # ============================================================================================
-    # 7. Compute dispersion energy
+    # 7. Compute dispersion energy with QDO damping function
+    #    Damping function (Eq. 24 from reference)
+    #    f_{2n}(z) = 1 - exp(-z) * sum_{k=0}^{n} z^k / k!
+    #    z = (gamma * R)^2 / 2, gamma = sqrt(muomega) (in a.u., hbar = 1)
     # ============================================================================================
     r6 = r12 ** 6
     r8 = r12 ** 8
     r10 = r12 ** 10
     
+    # Calculate damping functions
+    gamma = np.sqrt(muomega)
+    z = (gamma[:, np.newaxis] * r12)**2 / 2
+    
+    f6 = 1.0 - np.exp(-z) * (1 + z + z**2/2 + z**3/6)
+    f8 = 1.0 - np.exp(-z) * (1 + z + z**2/2 + z**3/6 + z**4/24)
+    f10 = 1.0 - np.exp(-z) * (1 + z + z**2/2 + z**3/6 + z**4/24 + z**5/120)
+    
+    # Damped dispersion energy
     HARTREE_TO_KCAL = 627.509  # kcal/mol
-    d_ener_hartree = -c6_pair / r6 - c8_pair / r8 - c10_pair / r10
-    total_energy_kcal = np.sum(d_ener_hartree) * HARTREE_TO_KCAL
+    d_ener_hartree = -f6 * c6_pair / r6 - f8 * c8_pair / r8 - f10 * c10_pair / r10
+    total_energy_hartree = np.sum(d_ener_hartree)
+    total_energy_kcal = total_energy_hartree * HARTREE_TO_KCAL
 
+    # ============================================================================================
+    # 8. Optional: Return mu and omega separately parameters for QDO model
+    # ============================================================================================
     if return_mu_omega:
-        # C₆ = (3/4) * ω * α²  (en unidades atómicas)
+        # C₆ = (3/4) * omega * α²  (atomic units)
         omega = (4 * c6_pair) / (3 * alpha_pair**2)
         mu = muomega / omega
         return total_energy_kcal, c6_pair, c8_pair, c10_pair, muomega, r12, mu, omega
